@@ -4,9 +4,12 @@ import { ArrowLeft, Edit2, Save, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { Tables, TablesUpdate } from '@/lib/types';
 import { useInteractions } from '@/hooks/useInteractions';
+import { useNeeds } from '@/hooks/useNeeds';
 import { StatusBadge } from '@/components/businesses/StatusBadge';
 import { ActivityForm } from '@/components/interactions/ActivityForm';
 import { Timeline } from '@/components/interactions/Timeline';
+import { NeedForm } from '@/components/needs/NeedForm';
+import { NeedCard } from '@/components/needs/NeedCard';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 
@@ -25,6 +28,7 @@ export default function BusinessDetail() {
   const [editForm, setEditForm] = useState<TablesUpdate<'businesses'>>({});
 
   const { interactions, loading: interactionsLoading, createInteraction } = useInteractions(id || '');
+  const { needs, loading: needsLoading, createNeed, updateNeed } = useNeeds({ businessId: id });
 
   const fetchBusiness = useCallback(async () => {
     if (!id) return;
@@ -175,8 +179,25 @@ export default function BusinessDetail() {
             </div>
           )}
           {activeTab === 'Needs' && (
-            <div className="text-center py-8 text-muted-foreground">
-              Needs tracking will be built in Milestone 4.
+            <div className="space-y-6">
+              <NeedForm businessId={business.id} onSave={createNeed} />
+              {needsLoading ? (
+                <LoadingSpinner />
+              ) : needs.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  No needs identified yet. Add the first one above.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {needs.map(need => (
+                    <NeedCard
+                      key={need.id}
+                      need={need}
+                      onStatusChange={(id, status) => updateNeed(id, { status })}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           )}
           {activeTab === 'Emails' && (

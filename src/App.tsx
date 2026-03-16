@@ -6,6 +6,7 @@ import Login from '@/pages/Login';
 import Dashboard from '@/pages/Dashboard';
 import Businesses from '@/pages/Businesses';
 import BusinessDetail from '@/pages/BusinessDetail';
+import NeedsTracker from '@/pages/NeedsTracker';
 
 function App() {
   const { user, loading } = useAuth();
@@ -33,6 +34,7 @@ function App() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/businesses" element={<Businesses />} />
         <Route path="/businesses/:id" element={<BusinessDetail />} />
+        <Route path="/needs" element={<NeedsTracker />} />
         <Route path="/login" element={<Navigate to="/" replace />} />
         <Route path="*" element={
           <div className="text-center py-20">
