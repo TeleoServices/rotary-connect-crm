@@ -7,8 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.4"
   }
@@ -177,6 +175,30 @@ export type Database = {
           },
         ]
       }
+      org_settings: {
+        Row: {
+          default_city: string
+          default_state: string
+          id: string
+          org_name: string
+          updated_at: string | null
+        }
+        Insert: {
+          default_city?: string
+          default_state?: string
+          id?: string
+          org_name?: string
+          updated_at?: string | null
+        }
+        Update: {
+          default_city?: string
+          default_state?: string
+          id?: string
+          org_name?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       team_members: {
         Row: {
           created_at: string | null
@@ -257,7 +279,8 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      is_admin: { Args: never; Returns: boolean }
+      is_lead_or_admin: { Args: never; Returns: boolean }
     }
     Enums: {
       [_ in never]: never
@@ -384,3 +407,9 @@ export type CompositeTypes<
   : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
     ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
     : never
+
+export const Constants = {
+  public: {
+    Enums: {},
+  },
+} as const
