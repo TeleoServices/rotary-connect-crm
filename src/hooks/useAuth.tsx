@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, createContext, useContext, type ReactNode } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import type { Tables } from '@/lib/types';
@@ -12,7 +12,16 @@ interface AuthState {
   loading: boolean;
 }
 
-export function useAuth() {
+interface AuthContextValue extends AuthState {
+  signInWithMagicLink: (email: string) => Promise<{ error: string | null }>;
+  signOut: () => Promise<void>;
+  isAdmin: boolean;
+  isLead: boolean;
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({
     user: null,
     session: null,
@@ -20,7 +29,7 @@ export function useAuth() {
     loading: true,
   });
 
-  const fetchProfile = useCallback(async (userId: string) => {
+  const fetchProfile = useCallback(async (userId: string): Promise<TeamMember | null> => {
     const { data, error } = await supabase
       .from('team_members')
       .select('*')
@@ -28,8 +37,8 @@ export function useAuth() {
       .single();
 
     if (error) {
-      // Profile doesn't exist yet — create one on first login
       if (error.code === 'PGRST116') {
+        // No row found — will create in ensureProfile
         return null;
       }
       console.error('[useAuth] fetchProfile:', error.message);
@@ -38,7 +47,7 @@ export function useAuth() {
     return data;
   }, []);
 
-  const ensureProfile = useCallback(async (user: User) => {
+  const ensureProfile = useCallback(async (user: User): Promise<TeamMember | null> => {
     let profile = await fetchProfile(user.id);
     if (!profile) {
       // Auto-create team_members row on first login
@@ -54,8 +63,11 @@ export function useAuth() {
         .single();
 
       if (error) {
-        console.error('[useAuth] ensureProfile:', error.message);
-        return null;
+        console.error('[useAuth] ensureProfile insert:', error.message);
+        // INSERT may fail due to RLS or duplicate key — try fetching again
+        // (another instance may have created it, or it existed but had a transient error)
+        profile = await fetchProfile(user.id);
+        return profile;
       }
       profile = data;
     }
@@ -63,29 +75,47 @@ export function useAuth() {
   }, [fetchProfile]);
 
   useEffect(() => {
+    let mounted = true;
+
     // Get initial session
     supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!mounted) return;
       if (session?.user) {
         const profile = await ensureProfile(session.user);
-        setState({ user: session.user, session, profile, loading: false });
+        if (mounted) {
+          setState({ user: session.user, session, profile, loading: false });
+        }
       } else {
-        setState({ user: null, session: null, profile: null, loading: false });
+        if (mounted) {
+          setState({ user: null, session: null, profile: null, loading: false });
+        }
       }
     });
 
-    // Listen for auth changes
+    // Listen for auth changes (sign in, sign out, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      async (event, session) => {
+        if (!mounted) return;
+        // Skip INITIAL_SESSION — already handled by getSession above
+        if (event === 'INITIAL_SESSION') return;
+
         if (session?.user) {
           const profile = await ensureProfile(session.user);
-          setState({ user: session.user, session, profile, loading: false });
+          if (mounted) {
+            setState({ user: session.user, session, profile, loading: false });
+          }
         } else {
-          setState({ user: null, session: null, profile: null, loading: false });
+          if (mounted) {
+            setState({ user: null, session: null, profile: null, loading: false });
+          }
         }
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, [ensureProfile]);
 
   const signInWithMagicLink = async (email: string) => {
@@ -109,11 +139,21 @@ export function useAuth() {
     }
   };
 
-  return {
+  const value: AuthContextValue = {
     ...state,
     signInWithMagicLink,
     signOut,
     isAdmin: state.profile?.role === 'admin',
     isLead: state.profile?.role === 'lead' || state.profile?.role === 'admin',
   };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function useAuth(): AuthContextValue {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an <AuthProvider>');
+  }
+  return context;
 }

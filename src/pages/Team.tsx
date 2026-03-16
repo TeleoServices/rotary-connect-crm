@@ -8,7 +8,7 @@ import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 
 
 export default function Team() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, loading: authLoading } = useAuth();
   const { members, loading, updateMember } = useTeam();
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviting, setInviting] = useState(false);
@@ -34,6 +34,10 @@ export default function Team() {
     }
     fetchLeaderboard();
   }, []);
+
+  if (authLoading) {
+    return <LoadingSpinner />;
+  }
 
   if (!isAdmin) {
     return (
