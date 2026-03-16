@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, createContext, useContext, type ReactNode } from 'react';
+import { useState, useEffect, useCallback, useRef, createContext, useContext, type ReactNode } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import type { Tables } from '@/lib/types';
@@ -21,6 +21,8 @@ interface AuthContextValue extends AuthState {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+const AUTH_TIMEOUT_MS = 5000;
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({
     user: null,
@@ -28,95 +30,135 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     profile: null,
     loading: true,
   });
+  const resolved = useRef(false);
 
   const fetchProfile = useCallback(async (userId: string): Promise<TeamMember | null> => {
-    const { data, error } = await supabase
-      .from('team_members')
-      .select('*')
-      .eq('id', userId)
-      .single();
-
-    if (error) {
-      if (error.code === 'PGRST116') {
-        // No row found — will create in ensureProfile
-        return null;
-      }
-      console.error('[useAuth] fetchProfile:', error.message);
-      return null;
-    }
-    return data;
-  }, []);
-
-  const ensureProfile = useCallback(async (user: User): Promise<TeamMember | null> => {
-    let profile = await fetchProfile(user.id);
-    if (!profile) {
-      // Auto-create team_members row on first login
+    try {
       const { data, error } = await supabase
         .from('team_members')
-        .insert({
-          id: user.id,
-          full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'New Member',
-          email: user.email,
-          role: 'member',
-        })
-        .select()
+        .select('*')
+        .eq('id', userId)
         .single();
 
       if (error) {
-        console.error('[useAuth] ensureProfile insert:', error.message);
-        // INSERT may fail due to RLS or duplicate key — try fetching again
-        // (another instance may have created it, or it existed but had a transient error)
-        profile = await fetchProfile(user.id);
-        return profile;
+        if (error.code === 'PGRST116') {
+          return null;
+        }
+        console.error('[useAuth] fetchProfile:', error.message);
+        return null;
       }
-      profile = data;
+      return data;
+    } catch (err) {
+      console.error('[useAuth] fetchProfile exception:', err);
+      return null;
     }
-    return profile;
+  }, []);
+
+  const ensureProfile = useCallback(async (user: User): Promise<TeamMember | null> => {
+    try {
+      let profile = await fetchProfile(user.id);
+      if (!profile) {
+        const { data, error } = await supabase
+          .from('team_members')
+          .insert({
+            id: user.id,
+            full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'New Member',
+            email: user.email,
+            role: 'member',
+          })
+          .select()
+          .single();
+
+        if (error) {
+          console.error('[useAuth] ensureProfile insert:', error.message);
+          profile = await fetchProfile(user.id);
+          return profile;
+        }
+        profile = data;
+      }
+      return profile;
+    } catch (err) {
+      console.error('[useAuth] ensureProfile exception:', err);
+      return null;
+    }
   }, [fetchProfile]);
 
-  useEffect(() => {
-    let mounted = true;
+  /** Resolve auth state — called from listener or getSession */
+  const resolve = useCallback(async (session: Session | null, mounted: { current: boolean }) => {
+    if (!mounted.current) return;
+    resolved.current = true;
 
-    // Get initial session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!mounted) return;
-      if (session?.user) {
-        const profile = await ensureProfile(session.user);
-        if (mounted) {
-          setState({ user: session.user, session, profile, loading: false });
-        }
-      } else {
-        if (mounted) {
-          setState({ user: null, session: null, profile: null, loading: false });
-        }
+    if (session?.user) {
+      const profile = await ensureProfile(session.user);
+      if (mounted.current) {
+        setState({ user: session.user, session, profile, loading: false });
       }
-    });
+    } else {
+      if (mounted.current) {
+        setState({ user: null, session: null, profile: null, loading: false });
+      }
+    }
+  }, [ensureProfile]);
 
-    // Listen for auth changes (sign in, sign out, token refresh)
+  useEffect(() => {
+    const mounted = { current: true };
+
+    // Timeout fallback — if auth hasn't resolved in 5s, clear loading
+    const timeout = setTimeout(() => {
+      if (mounted.current && !resolved.current) {
+        console.warn('[useAuth] Auth resolution timed out after 5s — clearing loading state');
+        setState({ user: null, session: null, profile: null, loading: false });
+        resolved.current = true;
+      }
+    }, AUTH_TIMEOUT_MS);
+
+    // Listen for ALL auth events including INITIAL_SESSION
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        if (!mounted) return;
-        // Skip INITIAL_SESSION — already handled by getSession above
-        if (event === 'INITIAL_SESSION') return;
+        if (!mounted.current) return;
+        console.debug('[useAuth] onAuthStateChange:', event);
 
-        if (session?.user) {
-          const profile = await ensureProfile(session.user);
-          if (mounted) {
-            setState({ user: session.user, session, profile, loading: false });
-          }
-        } else {
-          if (mounted) {
-            setState({ user: null, session: null, profile: null, loading: false });
-          }
+        switch (event) {
+          case 'INITIAL_SESSION':
+          case 'SIGNED_IN':
+          case 'TOKEN_REFRESHED':
+            await resolve(session, mounted);
+            break;
+
+          case 'SIGNED_OUT':
+            resolved.current = true;
+            if (mounted.current) {
+              setState({ user: null, session: null, profile: null, loading: false });
+            }
+            break;
+
+          default:
+            // USER_UPDATED, PASSWORD_RECOVERY, etc.
+            await resolve(session, mounted);
+            break;
         }
       }
     );
 
+    // Fallback: if onAuthStateChange doesn't fire INITIAL_SESSION quickly,
+    // getSession() ensures we still resolve
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!mounted.current || resolved.current) return;
+      await resolve(session, mounted);
+    }).catch((err) => {
+      console.error('[useAuth] getSession error:', err);
+      if (mounted.current && !resolved.current) {
+        resolved.current = true;
+        setState({ user: null, session: null, profile: null, loading: false });
+      }
+    });
+
     return () => {
-      mounted = false;
+      mounted.current = false;
+      clearTimeout(timeout);
       subscription.unsubscribe();
     };
-  }, [ensureProfile]);
+  }, [resolve]);
 
   const signInWithMagicLink = async (email: string) => {
     const { error } = await supabase.auth.signInWithOtp({
