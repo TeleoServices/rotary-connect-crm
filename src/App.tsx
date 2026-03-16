@@ -1,20 +1,44 @@
-import { Routes, Route } from 'react-router-dom'
-import Login from './pages/Login'
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
+import { AppLayout } from '@/components/layout/AppLayout';
+import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import Login from '@/pages/Login';
+import Dashboard from '@/pages/Dashboard';
 
 function App() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <LoadingSpinner />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    );
+  }
+
   return (
-    <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route path="*" element={
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="text-center">
-            <h1 className="text-4xl font-bold mb-4">RotaryConnect CRM</h1>
-            <p className="text-muted-foreground">Local business outreach platform for Rotary clubs</p>
+    <AppLayout>
+      <Routes>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/login" element={<Navigate to="/" replace />} />
+        <Route path="*" element={
+          <div className="text-center py-20">
+            <h2 className="text-2xl font-bold mb-2">Coming Soon</h2>
+            <p className="text-muted-foreground">This page is under construction.</p>
           </div>
-        </div>
-      } />
-    </Routes>
-  )
+        } />
+      </Routes>
+    </AppLayout>
+  );
 }
 
-export default App
+export default App;
