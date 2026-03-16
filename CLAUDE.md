@@ -103,7 +103,9 @@ No generic class names (.card, .header, .container) outside of shadcn/ui.
 
 ## Current Status
 
-### Milestones 0-7: COMPLETE
+All 10 milestones (0-9) are complete. See PROGRESS.md for detailed commit history.
+
+### Milestones Summary
 - M0: Infrastructure — Vite + React + Tailwind + Vercel deploy
 - M1: Database + Auth — 5 tables, RLS policies, magic link auth, auto team_members creation
 - M2: Business Directory — TanStack Table, filters, pagination, CSV import/export, quick-add
@@ -112,25 +114,8 @@ No generic class names (.card, .header, .container) outside of shadcn/ui.
 - M5: Templates & Scripts — Template list, editor with merge fields, preview, copy-to-clipboard
 - M6: Dashboard — Stat cards, real-time activity feed, Recharts needs-by-category chart
 - M7: Team Management — Admin-only gate, invite via magic link, members table, leaderboard
-
-### Milestone 8: IN PROGRESS — Settings + Polish
-Checklist:
-- [x] Settings page created (org name, default city/state, data export for all 5 tables)
-- [x] Settings page routed in App.tsx (`/settings`)
-- [ ] Mobile responsive pass on every page (375px viewport)
-- [ ] Loading spinners on all data-fetching states
-- [ ] Empty states on all list views ("No businesses yet — add your first one!")
-- [ ] Error boundaries around every major section
-- [ ] Accessibility audit: labels, keyboard nav, contrast ratios >= 4.5:1
-- [ ] Offline interaction draft indicator
-
-### Milestone 9: PENDING — Documentation
-- [ ] Create docs/SETUP.md (dev setup for contributors)
-- [ ] Create docs/TESTING.md (external tester instructions)
-- [ ] Create docs/ARCHITECTURE.md (technical decisions and patterns)
-- [ ] Update README.md (live test site URL, quick start, tech stack, structure)
-- [ ] Create PROGRESS.md (living build log with dates and commit hashes)
-- [ ] Final commit and push
+- M8: Settings + Polish — Settings page, error boundaries on all pages, accessibility improvements
+- M9: Documentation — README, SETUP.md, TESTING.md, ARCHITECTURE.md, PROGRESS.md, CLAUDE.md
 
 ---
 
