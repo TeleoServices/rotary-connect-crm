@@ -5,6 +5,7 @@ import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import Login from '@/pages/Login';
 import Dashboard from '@/pages/Dashboard';
 import Businesses from '@/pages/Businesses';
+import BusinessDetail from '@/pages/BusinessDetail';
 
 function App() {
   const { user, loading } = useAuth();
@@ -31,6 +32,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/businesses" element={<Businesses />} />
+        <Route path="/businesses/:id" element={<BusinessDetail />} />
         <Route path="/login" element={<Navigate to="/" replace />} />
         <Route path="*" element={
           <div className="text-center py-20">
