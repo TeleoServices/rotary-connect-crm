@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Download, Lock, Save, Loader2, CheckCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { sanitizeCSVField } from '@/lib/sanitize';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import type { Database } from '@/lib/types';
@@ -102,7 +103,32 @@ export default function Settings() {
     }
   };
 
-  const exportData = async (table: TableName) => {
+  const downloadFile = (content: string, filename: string, mimeType: string) => {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const toCsv = (rows: Record<string, unknown>[]): string => {
+    if (rows.length === 0) return '';
+    const headers = Object.keys(rows[0]);
+    const headerLine = headers.map(h => sanitizeCSVField(h)).join(',');
+    const dataLines = rows.map(row =>
+      headers.map(h => {
+        const val = row[h];
+        if (val === null || val === undefined) return '';
+        if (Array.isArray(val)) return sanitizeCSVField(val.join('; '));
+        return sanitizeCSVField(String(val));
+      }).join(',')
+    );
+    return [headerLine, ...dataLines].join('\n');
+  };
+
+  const exportData = async (table: TableName, format: 'csv' | 'json') => {
     setExporting(true);
     const { data, error } = await supabase.from(table).select('*');
     if (error) {
@@ -111,13 +137,13 @@ export default function Settings() {
       return;
     }
 
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${table}-${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const dateStr = new Date().toISOString().split('T')[0];
+    if (format === 'csv') {
+      const csv = toCsv((data || []) as Record<string, unknown>[]);
+      downloadFile(csv, `${table}-${dateStr}.csv`, 'text/csv');
+    } else {
+      downloadFile(JSON.stringify(data, null, 2), `${table}-${dateStr}.json`, 'application/json');
+    }
     setExporting(false);
   };
 
@@ -255,19 +281,30 @@ export default function Settings() {
         <ErrorBoundary>
           <section className="set-export space-y-4">
             <h2 className="font-bold text-lg">Data Export</h2>
-            <p className="text-sm text-muted-foreground">Download your data as JSON files.</p>
-            <div className="grid grid-cols-2 gap-2">
+            <p className="text-sm text-muted-foreground">Download your data as CSV (for Excel) or JSON.</p>
+            <div className="space-y-2">
               {EXPORT_TABLES.map(table => (
-                <button
-                  key={table}
-                  onClick={() => exportData(table)}
-                  disabled={exporting}
-                  aria-label={`Export ${table.replace('_', ' ')} data`}
-                  className="flex items-center gap-2 px-3 py-2 border border-input rounded-md text-sm hover:bg-accent disabled:opacity-50"
-                >
-                  <Download className="h-4 w-4" aria-hidden="true" />
-                  {table.replace('_', ' ')}
-                </button>
+                <div key={table} className="flex items-center gap-2">
+                  <span className="flex-1 text-sm font-medium capitalize">{table.replace(/_/g, ' ')}</span>
+                  <button
+                    onClick={() => exportData(table, 'csv')}
+                    disabled={exporting}
+                    aria-label={`Export ${table.replace(/_/g, ' ')} as CSV`}
+                    className="flex items-center gap-1.5 px-3 py-1.5 border border-input rounded-md text-xs hover:bg-accent disabled:opacity-50"
+                  >
+                    <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                    CSV
+                  </button>
+                  <button
+                    onClick={() => exportData(table, 'json')}
+                    disabled={exporting}
+                    aria-label={`Export ${table.replace(/_/g, ' ')} as JSON`}
+                    className="flex items-center gap-1.5 px-3 py-1.5 border border-input rounded-md text-xs hover:bg-accent disabled:opacity-50"
+                  >
+                    <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                    JSON
+                  </button>
+                </div>
               ))}
             </div>
           </section>

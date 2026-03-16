@@ -175,6 +175,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    // Clear state immediately so the UI redirects to /login
+    setState({ user: null, session: null, profile: null, loading: false });
     const { error } = await supabase.auth.signOut();
     if (error) {
       console.error('[useAuth] signOut:', error.message);
