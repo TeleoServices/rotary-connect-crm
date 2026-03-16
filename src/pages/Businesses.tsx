@@ -13,6 +13,7 @@ import { StatusBadge } from '@/components/businesses/StatusBadge';
 import { QuickAddBusiness } from '@/components/businesses/QuickAddBusiness';
 import { CSVImport } from '@/components/businesses/CSVImport';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 
 export default function Businesses() {
   const navigate = useNavigate();
@@ -151,6 +152,7 @@ export default function Businesses() {
 
       <BusinessFilters filters={filters} onFiltersChange={setFilters} />
 
+      <ErrorBoundary>
       {loading ? (
         <LoadingSpinner />
       ) : businesses.length === 0 ? (
@@ -215,6 +217,7 @@ export default function Businesses() {
           </div>
         </>
       )}
+      </ErrorBoundary>
 
       <QuickAddBusiness
         open={quickAddOpen}

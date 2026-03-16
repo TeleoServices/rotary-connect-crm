@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTeam } from '@/hooks/useTeam';
 import { supabase } from '@/lib/supabase';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 
 
 export default function Team() {
@@ -76,11 +77,14 @@ export default function Team() {
         </div>
       </div>
 
+      <ErrorBoundary>
       {/* Invite Form */}
       <div className="team-invite-form border border-border rounded-lg p-4 mb-6">
         <h3 className="font-medium text-sm mb-3">Invite New Member</h3>
         <form onSubmit={handleInvite} className="flex gap-2">
+          <label htmlFor="team-invite-email" className="sr-only">Email address</label>
           <input
+            id="team-invite-email"
             type="email"
             value={inviteEmail}
             onChange={e => setInviteEmail(e.target.value)}
@@ -130,6 +134,7 @@ export default function Team() {
                       <select
                         value={member.role || 'member'}
                         onChange={e => updateMember(member.id, { role: e.target.value })}
+                        aria-label={`Role for ${member.full_name}`}
                         className="px-2 py-1 border border-input rounded text-xs bg-background"
                       >
                         <option value="member">Member</option>
@@ -157,6 +162,7 @@ export default function Team() {
           </table>
         </div>
       )}
+      </ErrorBoundary>
     </div>
   );
 }

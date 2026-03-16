@@ -3,6 +3,7 @@ import { Download, LayoutGrid, List } from 'lucide-react';
 import { useNeeds, NEED_CATEGORIES, NEED_PRIORITIES, CATEGORY_LABELS, PRIORITY_COLORS, STATUS_LABELS, type NeedFilters } from '@/hooks/useNeeds';
 import { KanbanBoard } from '@/components/needs/KanbanBoard';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 
 export default function NeedsTracker() {
   const [filters, setFilters] = useState<NeedFilters>({});
@@ -107,6 +108,7 @@ export default function NeedsTracker() {
         ))}
       </div>
 
+      <ErrorBoundary>
       {loading ? (
         <LoadingSpinner />
       ) : needs.length === 0 ? (
@@ -158,6 +160,7 @@ export default function NeedsTracker() {
           </table>
         </div>
       )}
+      </ErrorBoundary>
     </div>
   );
 }

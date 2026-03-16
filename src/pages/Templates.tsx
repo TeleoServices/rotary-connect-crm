@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Copy, Check, Edit2, Save, X } from 'lucide-react';
 import { useTemplates, TYPE_LABELS, TYPE_GROUPS, renderMergeFields, type Template } from '@/hooks/useTemplates';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 
 const SAMPLE_DATA: Record<string, string> = {
   '{{contact_name}}': 'Jane Smith',
@@ -75,6 +76,7 @@ export default function Templates() {
         </div>
       </div>
 
+      <ErrorBoundary>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Template List */}
         <div className="tpl-list space-y-4">
@@ -218,6 +220,7 @@ export default function Templates() {
           )}
         </div>
       </div>
+      </ErrorBoundary>
     </div>
   );
 }

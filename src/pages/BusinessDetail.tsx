@@ -202,7 +202,8 @@ export default function BusinessDetail() {
           )}
           {activeTab === 'Emails' && (
             <div className="text-center py-8 text-muted-foreground">
-              Email templates will be integrated in Milestone 5.
+              <p className="text-lg mb-2">No email drafts yet</p>
+              <p className="text-sm">Use the <Link to="/templates" className="text-primary underline">Templates</Link> page to create outreach emails with merge fields, then copy to clipboard.</p>
             </div>
           )}
         </div>
