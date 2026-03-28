@@ -10,6 +10,7 @@ import { ActivityForm } from '@/components/interactions/ActivityForm';
 import { Timeline } from '@/components/interactions/Timeline';
 import { NeedForm } from '@/components/needs/NeedForm';
 import { NeedCard } from '@/components/needs/NeedCard';
+import { EmailTab } from '@/components/interactions/EmailTab';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { QueryError } from '@/components/common/QueryError';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
@@ -267,10 +268,7 @@ export default function BusinessDetail() {
             </div>
           )}
           {activeTab === 'Emails' && (
-            <div className="text-center py-8 text-muted-foreground">
-              <p className="text-lg mb-2">No email drafts yet</p>
-              <p className="text-sm">Use the <Link to="/templates" className="text-primary underline">Templates</Link> page to create outreach emails with merge fields, then copy to clipboard.</p>
-            </div>
+            <EmailTab business={business} needs={needs} />
           )}
         </div>
       </ErrorBoundary>
