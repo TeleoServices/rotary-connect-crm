@@ -3,8 +3,8 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Edit2, Save, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { Tables, TablesUpdate } from '@/lib/types';
-import { useInteractions } from '@/hooks/useInteractions';
-import { useNeeds } from '@/hooks/useNeeds';
+import { useInteractions, type Interaction } from '@/hooks/useInteractions';
+import { useNeeds, type BusinessNeed } from '@/hooks/useNeeds';
 import { StatusBadge } from '@/components/businesses/StatusBadge';
 import { ActivityForm } from '@/components/interactions/ActivityForm';
 import { Timeline } from '@/components/interactions/Timeline';
@@ -30,8 +30,12 @@ export default function BusinessDetail() {
   const [editForm, setEditForm] = useState<TablesUpdate<'businesses'>>({});
   const timeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  const { interactions, loading: interactionsLoading, error: interactionsError, createInteraction, refetch: refetchInteractions } = useInteractions(id || '');
-  const { needs, loading: needsLoading, error: needsError, createNeed, updateNeed, refetch: refetchNeeds } = useNeeds({ businessId: id });
+  const { interactions, loading: interactionsLoading, error: interactionsError, createInteraction, updateInteraction, deleteInteraction, refetch: refetchInteractions } = useInteractions(id || '');
+  const { needs, loading: needsLoading, error: needsError, createNeed, updateNeed, deleteNeed, refetch: refetchNeeds } = useNeeds({ businessId: id });
+
+  // Edit mode state for interactions and needs
+  const [editingInteraction, setEditingInteraction] = useState<Interaction | null>(null);
+  const [editingNeed, setEditingNeed] = useState<BusinessNeed | null>(null);
 
   const fetchBusiness = useCallback(async () => {
     if (!id) return;
@@ -206,7 +210,13 @@ export default function BusinessDetail() {
           )}
           {activeTab === 'Activity' && (
             <div className="space-y-6">
-              <ActivityForm businessId={business.id} onSave={createInteraction} />
+              <ActivityForm
+                businessId={business.id}
+                onSave={createInteraction}
+                onUpdate={(interactionId, updates) => updateInteraction(interactionId, updates)}
+                editingInteraction={editingInteraction}
+                onCancelEdit={() => setEditingInteraction(null)}
+              />
               {interactionsError ? (
                 <QueryError message={interactionsError} onRetry={refetchInteractions} />
               ) : interactionsLoading ? (
@@ -216,13 +226,23 @@ export default function BusinessDetail() {
                   No interactions yet. Log your first one above.
                 </div>
               ) : (
-                <Timeline interactions={interactions} />
+                <Timeline
+                  interactions={interactions}
+                  onEdit={setEditingInteraction}
+                  onDelete={deleteInteraction}
+                />
               )}
             </div>
           )}
           {activeTab === 'Needs' && (
             <div className="space-y-6">
-              <NeedForm businessId={business.id} onSave={createNeed} />
+              <NeedForm
+                businessId={business.id}
+                onSave={createNeed}
+                onUpdate={(needId, updates) => updateNeed(needId, updates)}
+                editingNeed={editingNeed}
+                onCancelEdit={() => setEditingNeed(null)}
+              />
               {needsError ? (
                 <QueryError message={needsError} onRetry={refetchNeeds} />
               ) : needsLoading ? (
@@ -237,7 +257,9 @@ export default function BusinessDetail() {
                     <NeedCard
                       key={need.id}
                       need={need}
-                      onStatusChange={(id, status) => updateNeed(id, { status })}
+                      onStatusChange={(needId, status) => updateNeed(needId, { status })}
+                      onEdit={setEditingNeed}
+                      onDelete={deleteNeed}
                     />
                   ))}
                 </div>

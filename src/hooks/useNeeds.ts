@@ -100,12 +100,27 @@ export function useNeeds(filters?: NeedFilters) {
     return true;
   };
 
+  const deleteNeed = async (id: string): Promise<boolean> => {
+    const { error } = await supabase
+      .from('business_needs')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('[useNeeds] delete:', error.message);
+      return false;
+    }
+    await fetchNeeds();
+    return true;
+  };
+
   return {
     needs,
     loading,
     error,
     createNeed,
     updateNeed,
+    deleteNeed,
     refetch: fetchNeeds,
   };
 }

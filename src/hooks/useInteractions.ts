@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import type { Tables, TablesInsert } from '@/lib/types';
+import type { Tables, TablesInsert, TablesUpdate } from '@/lib/types';
 
 type Interaction = Tables<'interactions'>;
 type InteractionInsert = TablesInsert<'interactions'>;
+type InteractionUpdate = TablesUpdate<'interactions'>;
 
 const QUERY_TIMEOUT_MS = 5000;
 
@@ -87,13 +88,43 @@ export function useInteractions(businessId: string) {
     return data;
   };
 
+  const updateInteraction = async (id: string, updates: InteractionUpdate): Promise<boolean> => {
+    const { error } = await supabase
+      .from('interactions')
+      .update(updates)
+      .eq('id', id);
+
+    if (error) {
+      console.error('[useInteractions] update:', error.message);
+      return false;
+    }
+    await fetchInteractions();
+    return true;
+  };
+
+  const deleteInteraction = async (id: string): Promise<boolean> => {
+    const { error } = await supabase
+      .from('interactions')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('[useInteractions] delete:', error.message);
+      return false;
+    }
+    await fetchInteractions();
+    return true;
+  };
+
   return {
     interactions,
     loading,
     error,
     createInteraction,
+    updateInteraction,
+    deleteInteraction,
     refetch: fetchInteractions,
   };
 }
 
-export type { Interaction, InteractionInsert };
+export type { Interaction, InteractionInsert, InteractionUpdate };

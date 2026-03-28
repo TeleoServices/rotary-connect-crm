@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Loader2, X } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import type { InteractionInsert } from '@/hooks/useInteractions';
+import type { Interaction, InteractionInsert } from '@/hooks/useInteractions';
 
 const INTERACTION_TYPES = [
   { value: 'call', label: 'Phone Call' },
@@ -13,50 +13,96 @@ const INTERACTION_TYPES = [
   { value: 'other', label: 'Other' },
 ];
 
+const EMPTY_FORM = {
+  type: 'call',
+  date: new Date().toISOString().split('T')[0],
+  subject: '',
+  notes: '',
+  outcome: '',
+  follow_up_date: '',
+};
+
 interface Props {
   businessId: string;
   onSave: (interaction: InteractionInsert) => Promise<unknown>;
+  onUpdate?: (id: string, updates: Partial<InteractionInsert>) => Promise<unknown>;
+  editingInteraction?: Interaction | null;
+  onCancelEdit?: () => void;
 }
 
-export function ActivityForm({ businessId, onSave }: Props) {
+export function ActivityForm({ businessId, onSave, onUpdate, editingInteraction, onCancelEdit }: Props) {
   const { user } = useAuth();
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    type: 'call',
-    date: new Date().toISOString().split('T')[0],
-    subject: '',
-    notes: '',
-    outcome: '',
-    follow_up_date: '',
-  });
+  const [form, setForm] = useState(EMPTY_FORM);
+
+  // When editingInteraction changes, populate form
+  useEffect(() => {
+    if (editingInteraction) {
+      setForm({
+        type: editingInteraction.type,
+        date: editingInteraction.date,
+        subject: editingInteraction.subject || '',
+        notes: editingInteraction.notes || '',
+        outcome: editingInteraction.outcome || '',
+        follow_up_date: editingInteraction.follow_up_date || '',
+      });
+    } else {
+      setForm(EMPTY_FORM);
+    }
+  }, [editingInteraction]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    await onSave({
-      business_id: businessId,
-      user_id: user?.id,
-      type: form.type,
-      date: form.date,
-      subject: form.subject || null,
-      notes: form.notes || null,
-      outcome: form.outcome || null,
-      follow_up_date: form.follow_up_date || null,
-    });
+
+    if (editingInteraction && onUpdate) {
+      await onUpdate(editingInteraction.id, {
+        type: form.type,
+        date: form.date,
+        subject: form.subject || null,
+        notes: form.notes || null,
+        outcome: form.outcome || null,
+        follow_up_date: form.follow_up_date || null,
+      });
+    } else {
+      await onSave({
+        business_id: businessId,
+        user_id: user?.id,
+        type: form.type,
+        date: form.date,
+        subject: form.subject || null,
+        notes: form.notes || null,
+        outcome: form.outcome || null,
+        follow_up_date: form.follow_up_date || null,
+      });
+    }
+
     setSaving(false);
-    setForm({
-      type: 'call',
-      date: new Date().toISOString().split('T')[0],
-      subject: '',
-      notes: '',
-      outcome: '',
-      follow_up_date: '',
-    });
+    setForm(EMPTY_FORM);
+    onCancelEdit?.();
+  };
+
+  const handleCancel = () => {
+    setForm(EMPTY_FORM);
+    onCancelEdit?.();
   };
 
   return (
     <form onSubmit={handleSubmit} className="int-form border border-border rounded-lg p-4 space-y-3 bg-muted/30">
-      <h3 className="font-medium text-sm">Log an Interaction</h3>
+      <div className="flex items-center justify-between">
+        <h3 className="font-medium text-sm">
+          {editingInteraction ? 'Edit Interaction' : 'Log an Interaction'}
+        </h3>
+        {editingInteraction && (
+          <button
+            type="button"
+            onClick={handleCancel}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-3.5 w-3.5" /> Cancel Edit
+          </button>
+        )}
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
@@ -132,7 +178,7 @@ export function ActivityForm({ businessId, onSave }: Props) {
         className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
       >
         {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-        Save Interaction
+        {editingInteraction ? 'Update Interaction' : 'Save Interaction'}
       </button>
     </form>
   );
