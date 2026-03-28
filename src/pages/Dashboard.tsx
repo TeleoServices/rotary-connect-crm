@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Building2, MessageSquare, Target, CalendarClock, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
@@ -8,6 +8,7 @@ import { useRecentActivity } from '@/hooks/useRealtime';
 import { CATEGORY_LABELS } from '@/hooks/useNeeds';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { QueryError } from '@/components/common/QueryError';
 
 interface DashStats {
   totalBusinesses: number;
@@ -30,6 +31,8 @@ interface FollowUp {
   business_name: string;
 }
 
+const QUERY_TIMEOUT_MS = 5000;
+
 function useStats() {
   const [stats, setStats] = useState<DashStats>({
     totalBusinesses: 0,
@@ -40,94 +43,133 @@ function useStats() {
   const [needsChart, setNeedsChart] = useState<NeedsByCategory[]>([]);
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  const fetchStats = () => {
+    setLoading(true);
+    setError(null);
+
+    clearTimeout(timeoutRef.current);
+    const timedOut = { current: false };
+    timeoutRef.current = setTimeout(() => {
+      timedOut.current = true;
+      setLoading(false);
+      setError('Request timed out — please try refreshing');
+    }, QUERY_TIMEOUT_MS);
+
+    (async () => {
+      try {
+        const { count: bizCount, error: bizError } = await supabase
+          .from('businesses')
+          .select('*', { count: 'exact', head: true });
+
+        if (bizError) {
+          if (timedOut.current) return;
+          clearTimeout(timeoutRef.current);
+          setError(`Failed to load dashboard: ${bizError.message}`);
+          setLoading(false);
+          return;
+        }
+
+        const weekAgo = new Date();
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        const { count: weekCount } = await supabase
+          .from('interactions')
+          .select('*', { count: 'exact', head: true })
+          .gte('date', weekAgo.toISOString().split('T')[0]);
+
+        const { count: needsCount } = await supabase
+          .from('business_needs')
+          .select('*', { count: 'exact', head: true });
+
+        const today = new Date().toISOString().split('T')[0];
+        const { count: followUpCount } = await supabase
+          .from('interactions')
+          .select('*', { count: 'exact', head: true })
+          .gte('follow_up_date', today)
+          .not('follow_up_date', 'is', null);
+
+        if (timedOut.current) return;
+
+        setStats({
+          totalBusinesses: bizCount ?? 0,
+          contactedThisWeek: weekCount ?? 0,
+          needsIdentified: needsCount ?? 0,
+          pendingFollowUps: followUpCount ?? 0,
+        });
+
+        // Fetch upcoming follow-ups with business name for the list
+        const { data: followUpData, error: followUpError } = await supabase
+          .from('interactions')
+          .select('id, follow_up_date, subject, type, business_id, businesses(name)')
+          .gte('follow_up_date', today)
+          .not('follow_up_date', 'is', null)
+          .order('follow_up_date', { ascending: true })
+          .limit(10);
+
+        if (followUpError) {
+          console.error('[Dashboard] followUps:', followUpError.message);
+        } else if (followUpData) {
+          setFollowUps(
+            followUpData.map((row) => ({
+              id: row.id,
+              follow_up_date: row.follow_up_date!,
+              subject: row.subject,
+              type: row.type,
+              business_id: row.business_id,
+              business_name: (row.businesses as unknown as { name: string })?.name || 'Unknown',
+            }))
+          );
+        }
+
+        const { data: needsData } = await supabase
+          .from('business_needs')
+          .select('category');
+
+        if (timedOut.current) return;
+        clearTimeout(timeoutRef.current);
+
+        if (needsData) {
+          const counts: Record<string, number> = {};
+          for (const n of needsData) {
+            counts[n.category] = (counts[n.category] || 0) + 1;
+          }
+          setNeedsChart(
+            Object.entries(counts)
+              .map(([category, count]) => ({
+                category: CATEGORY_LABELS[category] || category,
+                count,
+              }))
+              .sort((a, b) => b.count - a.count)
+          );
+        }
+
+        setLoading(false);
+      } catch (err: unknown) {
+        if (timedOut.current) return;
+        clearTimeout(timeoutRef.current);
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        console.error('[Dashboard] unexpected:', message);
+        setError(`Failed to load dashboard: ${message}`);
+        setLoading(false);
+      }
+    })();
+  };
 
   useEffect(() => {
-    async function fetch() {
-      const { count: bizCount } = await supabase
-        .from('businesses')
-        .select('*', { count: 'exact', head: true });
-
-      const weekAgo = new Date();
-      weekAgo.setDate(weekAgo.getDate() - 7);
-      const { count: weekCount } = await supabase
-        .from('interactions')
-        .select('*', { count: 'exact', head: true })
-        .gte('date', weekAgo.toISOString().split('T')[0]);
-
-      const { count: needsCount } = await supabase
-        .from('business_needs')
-        .select('*', { count: 'exact', head: true });
-
-      // Pending follow-ups: follow_up_date >= today (upcoming and today)
-      const today = new Date().toISOString().split('T')[0];
-      const { count: followUpCount } = await supabase
-        .from('interactions')
-        .select('*', { count: 'exact', head: true })
-        .gte('follow_up_date', today)
-        .not('follow_up_date', 'is', null);
-
-      setStats({
-        totalBusinesses: bizCount ?? 0,
-        contactedThisWeek: weekCount ?? 0,
-        needsIdentified: needsCount ?? 0,
-        pendingFollowUps: followUpCount ?? 0,
-      });
-
-      // Fetch upcoming follow-ups with business name for the list
-      const { data: followUpData, error: followUpError } = await supabase
-        .from('interactions')
-        .select('id, follow_up_date, subject, type, business_id, businesses(name)')
-        .gte('follow_up_date', today)
-        .not('follow_up_date', 'is', null)
-        .order('follow_up_date', { ascending: true })
-        .limit(10);
-
-      if (followUpError) {
-        console.error('[Dashboard] followUps:', followUpError.message);
-      } else if (followUpData) {
-        setFollowUps(
-          followUpData.map((row) => ({
-            id: row.id,
-            follow_up_date: row.follow_up_date!,
-            subject: row.subject,
-            type: row.type,
-            business_id: row.business_id,
-            business_name: (row.businesses as unknown as { name: string })?.name || 'Unknown',
-          }))
-        );
-      }
-
-      const { data: needsData } = await supabase
-        .from('business_needs')
-        .select('category');
-
-      if (needsData) {
-        const counts: Record<string, number> = {};
-        for (const n of needsData) {
-          counts[n.category] = (counts[n.category] || 0) + 1;
-        }
-        setNeedsChart(
-          Object.entries(counts)
-            .map(([category, count]) => ({
-              category: CATEGORY_LABELS[category] || category,
-              count,
-            }))
-            .sort((a, b) => b.count - a.count)
-        );
-      }
-
-      setLoading(false);
-    }
-    fetch();
+    fetchStats();
+    return () => clearTimeout(timeoutRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { stats, needsChart, followUps, loading };
+  return { stats, needsChart, followUps, loading, error, refetch: fetchStats };
 }
 
 export default function Dashboard() {
   const { profile } = useAuth();
-  const { stats, needsChart, followUps, loading: statsLoading } = useStats();
-  const { activities, loading: activityLoading } = useRecentActivity();
+  const { stats, needsChart, followUps, loading: statsLoading, error: statsError, refetch: refetchStats } = useStats();
+  const { activities, loading: activityLoading, error: activityError, refetch: refetchActivity } = useRecentActivity();
 
   return (
     <div>
@@ -136,19 +178,25 @@ export default function Dashboard() {
       </h1>
 
       <ErrorBoundary>
-        <div className="dash-stat-cards grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <StatCard icon={Building2} label="Total Businesses" value={stats.totalBusinesses} loading={statsLoading} />
-          <StatCard icon={MessageSquare} label="Contacted This Week" value={stats.contactedThisWeek} loading={statsLoading} />
-          <StatCard icon={Target} label="Needs Identified" value={stats.needsIdentified} loading={statsLoading} />
-          <StatCard icon={CalendarClock} label="Pending Follow-ups" value={stats.pendingFollowUps} loading={statsLoading} />
-        </div>
+        {statsError ? (
+          <QueryError message={statsError} onRetry={refetchStats} />
+        ) : (
+          <div className="dash-stat-cards grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <StatCard icon={Building2} label="Total Businesses" value={stats.totalBusinesses} loading={statsLoading} />
+            <StatCard icon={MessageSquare} label="Contacted This Week" value={stats.contactedThisWeek} loading={statsLoading} />
+            <StatCard icon={Target} label="Needs Identified" value={stats.needsIdentified} loading={statsLoading} />
+            <StatCard icon={CalendarClock} label="Pending Follow-ups" value={stats.pendingFollowUps} loading={statsLoading} />
+          </div>
+        )}
       </ErrorBoundary>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <ErrorBoundary>
           <div className="dash-activity-feed border border-border rounded-lg p-4">
             <h2 className="font-bold mb-4">Recent Activity</h2>
-            {activityLoading ? (
+            {activityError ? (
+              <QueryError message={activityError} onRetry={refetchActivity} />
+            ) : activityLoading ? (
               <LoadingSpinner />
             ) : activities.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-4">
@@ -173,7 +221,9 @@ export default function Dashboard() {
         <ErrorBoundary>
           <div className="dash-chart-container border border-border rounded-lg p-4">
             <h2 className="font-bold mb-4">Needs by Category</h2>
-            {statsLoading ? (
+            {statsError ? (
+              <QueryError message={statsError} onRetry={refetchStats} />
+            ) : statsLoading ? (
               <LoadingSpinner />
             ) : needsChart.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-4">No needs data yet.</p>
@@ -195,7 +245,9 @@ export default function Dashboard() {
       <ErrorBoundary>
         <div className="dash-follow-ups border border-border rounded-lg p-4">
           <h2 className="font-bold mb-4">Upcoming Follow-ups</h2>
-          {statsLoading ? (
+          {statsError ? (
+            <QueryError message={statsError} onRetry={refetchStats} />
+          ) : statsLoading ? (
             <LoadingSpinner />
           ) : followUps.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-4">

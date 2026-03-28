@@ -13,14 +13,15 @@ import { StatusBadge } from '@/components/businesses/StatusBadge';
 import { QuickAddBusiness } from '@/components/businesses/QuickAddBusiness';
 import { CSVImport } from '@/components/businesses/CSVImport';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { QueryError } from '@/components/common/QueryError';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 
 export default function Businesses() {
   const navigate = useNavigate();
   const {
-    businesses, loading, filters, setFilters,
+    businesses, loading, error, filters, setFilters,
     pagination, setPage,
-    createBusiness, bulkInsert,
+    createBusiness, bulkInsert, refetch,
   } = useBusinesses();
 
   const [quickAddOpen, setQuickAddOpen] = useState(false);
@@ -153,7 +154,9 @@ export default function Businesses() {
       <BusinessFilters filters={filters} onFiltersChange={setFilters} />
 
       <ErrorBoundary>
-      {loading ? (
+      {error ? (
+        <QueryError message={error} onRetry={refetch} />
+      ) : loading ? (
         <LoadingSpinner />
       ) : businesses.length === 0 ? (
         <div className="text-center py-20 text-muted-foreground">

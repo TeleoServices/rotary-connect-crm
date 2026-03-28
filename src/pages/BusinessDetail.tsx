@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Edit2, Save, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -11,6 +11,7 @@ import { Timeline } from '@/components/interactions/Timeline';
 import { NeedForm } from '@/components/needs/NeedForm';
 import { NeedCard } from '@/components/needs/NeedCard';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { QueryError } from '@/components/common/QueryError';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 
 type Business = Tables<'businesses'>;
@@ -23,25 +24,41 @@ export default function BusinessDetail() {
   const navigate = useNavigate();
   const [business, setBusiness] = useState<Business | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('Overview');
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState<TablesUpdate<'businesses'>>({});
+  const timeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  const { interactions, loading: interactionsLoading, createInteraction } = useInteractions(id || '');
-  const { needs, loading: needsLoading, createNeed, updateNeed } = useNeeds({ businessId: id });
+  const { interactions, loading: interactionsLoading, error: interactionsError, createInteraction, refetch: refetchInteractions } = useInteractions(id || '');
+  const { needs, loading: needsLoading, error: needsError, createNeed, updateNeed, refetch: refetchNeeds } = useNeeds({ businessId: id });
 
   const fetchBusiness = useCallback(async () => {
     if (!id) return;
     setLoading(true);
-    const { data, error } = await supabase
+    setError(null);
+
+    clearTimeout(timeoutRef.current);
+    const timedOut = { current: false };
+    timeoutRef.current = setTimeout(() => {
+      timedOut.current = true;
+      setLoading(false);
+      setError('Request timed out — please try refreshing');
+    }, 5000);
+
+    const { data, error: queryError } = await supabase
       .from('businesses')
       .select('*')
       .eq('id', id)
       .single();
 
-    if (error) {
-      console.error('[BusinessDetail] fetch:', error.message);
+    if (timedOut.current) return;
+    clearTimeout(timeoutRef.current);
+
+    if (queryError) {
+      console.error('[BusinessDetail] fetch:', queryError.message);
       setBusiness(null);
+      setError(`Failed to load business: ${queryError.message}`);
     } else {
       setBusiness(data);
     }
@@ -50,6 +67,7 @@ export default function BusinessDetail() {
 
   useEffect(() => {
     fetchBusiness();
+    return () => clearTimeout(timeoutRef.current);
   }, [fetchBusiness]);
 
   const startEditing = () => {
@@ -86,6 +104,20 @@ export default function BusinessDetail() {
     setEditing(false);
     await fetchBusiness();
   };
+
+  if (error) {
+    return (
+      <div className="space-y-4">
+        <button
+          onClick={() => navigate('/businesses')}
+          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" /> Back to Directory
+        </button>
+        <QueryError message={error} onRetry={fetchBusiness} />
+      </div>
+    );
+  }
 
   if (loading) return <LoadingSpinner />;
 
@@ -175,13 +207,25 @@ export default function BusinessDetail() {
           {activeTab === 'Activity' && (
             <div className="space-y-6">
               <ActivityForm businessId={business.id} onSave={createInteraction} />
-              {interactionsLoading ? <LoadingSpinner /> : <Timeline interactions={interactions} />}
+              {interactionsError ? (
+                <QueryError message={interactionsError} onRetry={refetchInteractions} />
+              ) : interactionsLoading ? (
+                <LoadingSpinner />
+              ) : interactions.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  No interactions yet. Log your first one above.
+                </div>
+              ) : (
+                <Timeline interactions={interactions} />
+              )}
             </div>
           )}
           {activeTab === 'Needs' && (
             <div className="space-y-6">
               <NeedForm businessId={business.id} onSave={createNeed} />
-              {needsLoading ? (
+              {needsError ? (
+                <QueryError message={needsError} onRetry={refetchNeeds} />
+              ) : needsLoading ? (
                 <LoadingSpinner />
               ) : needs.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">

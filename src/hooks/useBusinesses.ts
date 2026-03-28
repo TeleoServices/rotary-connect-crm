@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { Tables, TablesInsert, TablesUpdate } from '@/lib/types';
 
@@ -20,18 +20,33 @@ interface PaginationState {
   total: number;
 }
 
+const QUERY_TIMEOUT_MS = 5000;
+
 export function useBusinesses() {
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<BusinessFilters>({});
   const [pagination, setPagination] = useState<PaginationState>({
     page: 0,
     pageSize: 25,
     total: 0,
   });
+  const timeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const fetchBusinesses = useCallback(async () => {
     setLoading(true);
+    setError(null);
+
+    // Start 5s timeout
+    clearTimeout(timeoutRef.current);
+    const timedOut = { current: false };
+    timeoutRef.current = setTimeout(() => {
+      timedOut.current = true;
+      setLoading(false);
+      setError('Request timed out — please try refreshing');
+    }, QUERY_TIMEOUT_MS);
+
     try {
       let query = supabase.from('businesses').select('*', { count: 'exact' });
 
@@ -43,29 +58,38 @@ export function useBusinesses() {
       const from = pagination.page * pagination.pageSize;
       const to = from + pagination.pageSize - 1;
 
-      const { data, error, count } = await query
+      const { data, error: queryError, count } = await query
         .order('updated_at', { ascending: false })
         .range(from, to);
 
-      if (error) {
-        console.error('[useBusinesses] fetch:', error.message);
+      if (timedOut.current) return;
+      clearTimeout(timeoutRef.current);
+
+      if (queryError) {
+        console.error('[useBusinesses] fetch:', queryError.message);
         setBusinesses([]);
+        setError(`Failed to load businesses: ${queryError.message}`);
+        setLoading(false);
         return;
       }
 
       setBusinesses(data ?? []);
       setPagination(prev => ({ ...prev, total: count ?? 0 }));
+      setLoading(false);
     } catch (err: unknown) {
+      if (timedOut.current) return;
+      clearTimeout(timeoutRef.current);
       const message = err instanceof Error ? err.message : 'Unknown error';
       console.error('[useBusinesses] unexpected:', message);
       setBusinesses([]);
-    } finally {
+      setError(`Failed to load businesses: ${message}`);
       setLoading(false);
     }
   }, [filters, pagination.page, pagination.pageSize]);
 
   useEffect(() => {
     fetchBusinesses();
+    return () => clearTimeout(timeoutRef.current);
   }, [fetchBusinesses]);
 
   const createBusiness = async (business: BusinessInsert): Promise<Business | null> => {
@@ -152,6 +176,7 @@ export function useBusinesses() {
   return {
     businesses,
     loading,
+    error,
     filters,
     setFilters,
     pagination,

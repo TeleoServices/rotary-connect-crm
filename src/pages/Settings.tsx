@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Download, Lock, Save, Loader2, CheckCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { sanitizeCSVField } from '@/lib/sanitize';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { QueryError } from '@/components/common/QueryError';
 import type { Database } from '@/lib/types';
 
 type TableName = keyof Database['public']['Tables'];
@@ -17,8 +18,10 @@ export default function Settings() {
   const [defaultState, setDefaultState] = useState('');
   const [settingsId, setSettingsId] = useState<string | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(true);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  const settingsTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   // Password state
   const [newPassword, setNewPassword] = useState('');
@@ -29,17 +32,31 @@ export default function Settings() {
   // Export state
   const [exporting, setExporting] = useState(false);
 
-  // Load org settings on mount
-  useEffect(() => {
-    async function loadSettings() {
+  const loadSettings = () => {
+    setSettingsLoading(true);
+    setSettingsError(null);
+
+    clearTimeout(settingsTimeoutRef.current);
+    const timedOut = { current: false };
+    settingsTimeoutRef.current = setTimeout(() => {
+      timedOut.current = true;
+      setSettingsLoading(false);
+      setSettingsError('Request timed out — please try refreshing');
+    }, 5000);
+
+    (async () => {
       const { data, error } = await supabase
         .from('org_settings')
         .select('*')
         .limit(1)
         .single();
 
+      if (timedOut.current) return;
+      clearTimeout(settingsTimeoutRef.current);
+
       if (error) {
         console.error('[Settings] loadSettings:', error.message);
+        setSettingsError(`Failed to load settings: ${error.message}`);
       } else if (data) {
         setSettingsId(data.id);
         setOrgName(data.org_name);
@@ -47,8 +64,14 @@ export default function Settings() {
         setDefaultState(data.default_state);
       }
       setSettingsLoading(false);
-    }
+    })();
+  };
+
+  // Load org settings on mount
+  useEffect(() => {
     loadSettings();
+    return () => clearTimeout(settingsTimeoutRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const saveSettings = async () => {
@@ -156,7 +179,9 @@ export default function Settings() {
         <ErrorBoundary>
           <section className="set-form space-y-4">
             <h2 className="font-bold text-lg">Organization</h2>
-            {settingsLoading ? (
+            {settingsError ? (
+              <QueryError message={settingsError} onRetry={loadSettings} />
+            ) : settingsLoading ? (
               <LoadingSpinner />
             ) : (
               <>

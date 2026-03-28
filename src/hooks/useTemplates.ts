@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { Tables, TablesInsert, TablesUpdate } from '@/lib/types';
 
@@ -6,20 +6,38 @@ type Template = Tables<'templates'>;
 type TemplateInsert = TablesInsert<'templates'>;
 type TemplateUpdate = TablesUpdate<'templates'>;
 
+const QUERY_TIMEOUT_MS = 5000;
+
 export function useTemplates() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const fetchTemplates = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
+    setError(null);
+
+    clearTimeout(timeoutRef.current);
+    const timedOut = { current: false };
+    timeoutRef.current = setTimeout(() => {
+      timedOut.current = true;
+      setLoading(false);
+      setError('Request timed out — please try refreshing');
+    }, QUERY_TIMEOUT_MS);
+
+    const { data, error: queryError } = await supabase
       .from('templates')
       .select('*')
       .order('type', { ascending: true });
 
-    if (error) {
-      console.error('[useTemplates] fetch:', error.message);
+    if (timedOut.current) return;
+    clearTimeout(timeoutRef.current);
+
+    if (queryError) {
+      console.error('[useTemplates] fetch:', queryError.message);
       setTemplates([]);
+      setError(`Failed to load templates: ${queryError.message}`);
     } else {
       setTemplates(data ?? []);
     }
@@ -28,6 +46,7 @@ export function useTemplates() {
 
   useEffect(() => {
     fetchTemplates();
+    return () => clearTimeout(timeoutRef.current);
   }, [fetchTemplates]);
 
   const createTemplate = async (template: TemplateInsert): Promise<Template | null> => {
@@ -62,6 +81,7 @@ export function useTemplates() {
   return {
     templates,
     loading,
+    error,
     createTemplate,
     updateTemplate,
     refetch: fetchTemplates,

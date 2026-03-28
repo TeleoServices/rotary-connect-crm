@@ -3,12 +3,13 @@ import { Download, LayoutGrid, List } from 'lucide-react';
 import { useNeeds, NEED_CATEGORIES, NEED_PRIORITIES, CATEGORY_LABELS, PRIORITY_COLORS, STATUS_LABELS, type NeedFilters } from '@/hooks/useNeeds';
 import { KanbanBoard } from '@/components/needs/KanbanBoard';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { QueryError } from '@/components/common/QueryError';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 
 export default function NeedsTracker() {
   const [filters, setFilters] = useState<NeedFilters>({});
   const [view, setView] = useState<'kanban' | 'table'>('kanban');
-  const { needs, loading, updateNeed } = useNeeds(filters);
+  const { needs, loading, error, updateNeed, refetch } = useNeeds(filters);
 
   const handleStatusChange = async (id: string, status: string) => {
     await updateNeed(id, {
@@ -109,7 +110,9 @@ export default function NeedsTracker() {
       </div>
 
       <ErrorBoundary>
-      {loading ? (
+      {error ? (
+        <QueryError message={error} onRetry={refetch} />
+      ) : loading ? (
         <LoadingSpinner />
       ) : needs.length === 0 ? (
         <div className="text-center py-20 text-muted-foreground">

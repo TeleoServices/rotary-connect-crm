@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Copy, Check, Edit2, Save, X } from 'lucide-react';
 import { useTemplates, TYPE_LABELS, TYPE_GROUPS, renderMergeFields, type Template } from '@/hooks/useTemplates';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { QueryError } from '@/components/common/QueryError';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 
 const SAMPLE_DATA: Record<string, string> = {
@@ -21,7 +22,7 @@ const MERGE_FIELDS = [
 ];
 
 export default function Templates() {
-  const { templates, loading, updateTemplate } = useTemplates();
+  const { templates, loading, error, updateTemplate, refetch } = useTemplates();
   const [selected, setSelected] = useState<Template | null>(null);
   const [editing, setEditing] = useState(false);
   const [editBody, setEditBody] = useState('');
@@ -65,6 +66,7 @@ export default function Templates() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  if (error) return <QueryError message={error} onRetry={refetch} />;
   if (loading) return <LoadingSpinner />;
 
   return (

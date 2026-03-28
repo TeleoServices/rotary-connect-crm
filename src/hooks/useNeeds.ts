@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { Tables, TablesInsert, TablesUpdate } from '@/lib/types';
 
@@ -13,12 +13,26 @@ export interface NeedFilters {
   businessId?: string;
 }
 
+const QUERY_TIMEOUT_MS = 5000;
+
 export function useNeeds(filters?: NeedFilters) {
   const [needs, setNeeds] = useState<BusinessNeed[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const fetchNeeds = useCallback(async () => {
     setLoading(true);
+    setError(null);
+
+    clearTimeout(timeoutRef.current);
+    const timedOut = { current: false };
+    timeoutRef.current = setTimeout(() => {
+      timedOut.current = true;
+      setLoading(false);
+      setError('Request timed out — please try refreshing');
+    }, QUERY_TIMEOUT_MS);
+
     try {
       let query = supabase.from('business_needs').select('*');
 
@@ -27,25 +41,34 @@ export function useNeeds(filters?: NeedFilters) {
       if (filters?.priority) query = query.eq('priority', filters.priority);
       if (filters?.status) query = query.eq('status', filters.status);
 
-      const { data, error } = await query.order('created_at', { ascending: false });
+      const { data, error: queryError } = await query.order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('[useNeeds] fetch:', error.message);
+      if (timedOut.current) return;
+      clearTimeout(timeoutRef.current);
+
+      if (queryError) {
+        console.error('[useNeeds] fetch:', queryError.message);
         setNeeds([]);
+        setError(`Failed to load needs: ${queryError.message}`);
+        setLoading(false);
         return;
       }
       setNeeds(data ?? []);
+      setLoading(false);
     } catch (err: unknown) {
+      if (timedOut.current) return;
+      clearTimeout(timeoutRef.current);
       const message = err instanceof Error ? err.message : 'Unknown error';
       console.error('[useNeeds] unexpected:', message);
       setNeeds([]);
-    } finally {
+      setError(`Failed to load needs: ${message}`);
       setLoading(false);
     }
   }, [filters?.businessId, filters?.category, filters?.priority, filters?.status]);
 
   useEffect(() => {
     fetchNeeds();
+    return () => clearTimeout(timeoutRef.current);
   }, [fetchNeeds]);
 
   const createNeed = async (need: NeedInsert): Promise<BusinessNeed | null> => {
@@ -80,6 +103,7 @@ export function useNeeds(filters?: NeedFilters) {
   return {
     needs,
     loading,
+    error,
     createNeed,
     updateNeed,
     refetch: fetchNeeds,

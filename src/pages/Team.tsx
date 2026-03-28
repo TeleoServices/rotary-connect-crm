@@ -4,12 +4,13 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTeam } from '@/hooks/useTeam';
 import { supabase } from '@/lib/supabase';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { QueryError } from '@/components/common/QueryError';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 
 
 export default function Team() {
   const { isAdmin, loading: authLoading } = useAuth();
-  const { members, loading, updateMember } = useTeam();
+  const { members, loading, error, updateMember, refetch } = useTeam();
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviting, setInviting] = useState(false);
   const [inviteStatus, setInviteStatus] = useState<string | null>(null);
@@ -113,8 +114,15 @@ export default function Team() {
       </div>
 
       {/* Members Table */}
-      {loading ? (
+      {error ? (
+        <QueryError message={error} onRetry={refetch} />
+      ) : loading ? (
         <LoadingSpinner />
+      ) : members.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          <p className="text-lg mb-2">No team members yet</p>
+          <p className="text-sm">Invite your first team member above.</p>
+        </div>
       ) : (
         <div className="team-table border border-border rounded-lg overflow-x-auto">
           <table className="w-full text-sm">
