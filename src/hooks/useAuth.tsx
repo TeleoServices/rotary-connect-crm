@@ -21,7 +21,7 @@ interface AuthContextValue extends AuthState {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const AUTH_TIMEOUT_MS = 5000;
+const AUTH_TIMEOUT_MS = 3000;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({
@@ -84,16 +84,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [fetchProfile]);
 
   /** Resolve auth state — called from listener or getSession */
-  const resolve = useCallback(async (session: Session | null, mounted: { current: boolean }) => {
+  const resolve = useCallback(async (session: Session | null, mounted: { current: boolean }, reason: string) => {
     if (!mounted.current) return;
     resolved.current = true;
 
     if (session?.user) {
+      console.log(`[auth] loading set to false, reason=${reason}, session=true, fetching profile...`);
       const profile = await ensureProfile(session.user);
       if (mounted.current) {
         setState({ user: session.user, session, profile, loading: false });
+        console.log(`[auth] loading set to false, reason=${reason}, profile=${!!profile}`);
       }
     } else {
+      console.log(`[auth] loading set to false, reason=${reason}, session=false`);
       if (mounted.current) {
         setState({ user: null, session: null, profile: null, loading: false });
       }
@@ -102,56 +105,72 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const mounted = { current: true };
+    const t0 = performance.now();
+    const ts = () => `${(performance.now() - t0).toFixed(0)}ms`;
 
-    // Timeout fallback — if auth hasn't resolved in 5s, clear loading
+    // Primary check: getSession() — if no session, show login immediately
+    console.log(`[auth] getSession started @ ${ts()}`);
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      console.log(`[auth] getSession returned @ ${ts()}: session=${!!session}`);
+      if (!mounted.current || resolved.current) return;
+
+      if (!session) {
+        // No session — show login page immediately, don't wait for onAuthStateChange
+        await resolve(null, mounted, 'getSession-no-session');
+      } else {
+        await resolve(session, mounted, 'getSession-has-session');
+      }
+    }).catch((err) => {
+      console.error(`[auth] getSession error @ ${ts()}:`, err);
+      if (mounted.current && !resolved.current) {
+        resolved.current = true;
+        console.log(`[auth] loading set to false, reason=getSession-error`);
+        setState({ user: null, session: null, profile: null, loading: false });
+      }
+    });
+
+    // Safety net timeout — reduced to 3s
     const timeout = setTimeout(() => {
       if (mounted.current && !resolved.current) {
-        console.warn('[useAuth] Auth resolution timed out after 5s — clearing loading state');
+        console.warn(`[auth] Auth resolution timed out after 3s @ ${ts()} — clearing loading state`);
         setState({ user: null, session: null, profile: null, loading: false });
         resolved.current = true;
       }
     }, AUTH_TIMEOUT_MS);
 
-    // Listen for ALL auth events including INITIAL_SESSION
+    // Listen for auth state changes (handles sign-in, sign-out, token refresh after initial load)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted.current) return;
-        console.debug('[useAuth] onAuthStateChange:', event);
+        console.log(`[auth] onAuthStateChange fired @ ${ts()}: event=${event}`);
 
         switch (event) {
           case 'INITIAL_SESSION':
+            // getSession() is primary — only use INITIAL_SESSION if getSession hasn't resolved yet
+            if (!resolved.current) {
+              await resolve(session, mounted, 'onAuthStateChange-INITIAL_SESSION');
+            }
+            break;
+
           case 'SIGNED_IN':
           case 'TOKEN_REFRESHED':
-            await resolve(session, mounted);
+            await resolve(session, mounted, `onAuthStateChange-${event}`);
             break;
 
           case 'SIGNED_OUT':
             resolved.current = true;
+            console.log(`[auth] loading set to false, reason=onAuthStateChange-SIGNED_OUT`);
             if (mounted.current) {
               setState({ user: null, session: null, profile: null, loading: false });
             }
             break;
 
           default:
-            // USER_UPDATED, PASSWORD_RECOVERY, etc.
-            await resolve(session, mounted);
+            await resolve(session, mounted, `onAuthStateChange-${event}`);
             break;
         }
       }
     );
-
-    // Fallback: if onAuthStateChange doesn't fire INITIAL_SESSION quickly,
-    // getSession() ensures we still resolve
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!mounted.current || resolved.current) return;
-      await resolve(session, mounted);
-    }).catch((err) => {
-      console.error('[useAuth] getSession error:', err);
-      if (mounted.current && !resolved.current) {
-        resolved.current = true;
-        setState({ user: null, session: null, profile: null, loading: false });
-      }
-    });
 
     return () => {
       mounted.current = false;
