@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, createContext, useContext, type ReactNode } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { ENV } from '@/lib/env';
 import type { Tables } from '@/lib/types';
 
 type TeamMember = Tables<'team_members'>;
@@ -129,10 +130,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    // Safety net timeout — reduced to 3s
+    // Safety net timeout — if auth hasn't resolved in 3s, clear stale session and show login
     const timeout = setTimeout(() => {
       if (mounted.current && !resolved.current) {
-        console.warn(`[auth] Auth resolution timed out after 3s @ ${ts()} — clearing loading state`);
+        console.warn(`[auth] Auth resolution timed out after 3s @ ${ts()} — clearing stale session`);
+        // Clear any stale Supabase auth token from localStorage
+        try {
+          const projectRef = ENV.SUPABASE_URL.split('//')[1].split('.')[0];
+          localStorage.removeItem(`sb-${projectRef}-auth-token`);
+          console.log(`[auth] cleared stale localStorage token for project ${projectRef}`);
+        } catch (e) {
+          console.warn('[auth] could not clear localStorage:', e);
+        }
         setState({ user: null, session: null, profile: null, loading: false });
         resolved.current = true;
       }
