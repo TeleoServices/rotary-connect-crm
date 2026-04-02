@@ -84,25 +84,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [fetchProfile]);
 
-  /** Resolve auth state — called from listener or getSession */
-  const resolve = useCallback(async (session: Session | null, mounted: { current: boolean }, reason: string) => {
+  /** Fetch profile in the background with its own 5-second timeout.
+   *  App is already rendered — if this fails, user just sees email instead of name. */
+  const fetchProfileInBackground = useCallback((user: User, mounted: { current: boolean }) => {
+    let timedOut = false;
+    const profileTimeout = setTimeout(() => {
+      timedOut = true;
+      console.warn('[auth] profile fetch timed out after 5s — app continues without profile');
+    }, 5000);
+
+    ensureProfile(user).then((profile) => {
+      clearTimeout(profileTimeout);
+      if (timedOut) return;
+      if (mounted.current && profile) {
+        setState(prev => ({ ...prev, profile }));
+        console.log(`[auth] profile fetched in background, role=${profile.role}`);
+      }
+    }).catch((err) => {
+      clearTimeout(profileTimeout);
+      console.error('[auth] background profile fetch failed:', err);
+    });
+  }, [ensureProfile]);
+
+  /** Resolve auth state — called from listener or getSession.
+   *  Sets loading=false IMMEDIATELY after session check, BEFORE profile fetch. */
+  const resolve = useCallback((session: Session | null, mounted: { current: boolean }, reason: string) => {
     if (!mounted.current) return;
     resolved.current = true;
 
     if (session?.user) {
-      console.log(`[auth] loading set to false, reason=${reason}, session=true, fetching profile...`);
-      const profile = await ensureProfile(session.user);
-      if (mounted.current) {
-        setState({ user: session.user, session, profile, loading: false });
-        console.log(`[auth] loading set to false, reason=${reason}, profile=${!!profile}`);
-      }
+      // Set user and loading=false IMMEDIATELY — app renders now
+      console.log(`[auth] loading set to false, reason=${reason}, session=true`);
+      setState({ user: session.user, session, profile: null, loading: false });
+      // Fetch profile in the background — never blocks rendering
+      fetchProfileInBackground(session.user, mounted);
     } else {
       console.log(`[auth] loading set to false, reason=${reason}, session=false`);
-      if (mounted.current) {
-        setState({ user: null, session: null, profile: null, loading: false });
-      }
+      setState({ user: null, session: null, profile: null, loading: false });
     }
-  }, [ensureProfile]);
+  }, [fetchProfileInBackground]);
 
   useEffect(() => {
     const mounted = { current: true };
@@ -111,15 +131,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Primary check: getSession() — if no session, show login immediately
     console.log(`[auth] getSession started @ ${ts()}`);
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
       console.log(`[auth] getSession returned @ ${ts()}: session=${!!session}`);
       if (!mounted.current || resolved.current) return;
 
       if (!session) {
         // No session — show login page immediately, don't wait for onAuthStateChange
-        await resolve(null, mounted, 'getSession-no-session');
+        resolve(null, mounted, 'getSession-no-session');
       } else {
-        await resolve(session, mounted, 'getSession-has-session');
+        resolve(session, mounted, 'getSession-has-session');
       }
     }).catch((err) => {
       console.error(`[auth] getSession error @ ${ts()}:`, err);
@@ -149,7 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Listen for auth state changes (handles sign-in, sign-out, token refresh after initial load)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      (event, session) => {
         if (!mounted.current) return;
         console.log(`[auth] onAuthStateChange fired @ ${ts()}: event=${event}`);
 
@@ -157,13 +177,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           case 'INITIAL_SESSION':
             // getSession() is primary — only use INITIAL_SESSION if getSession hasn't resolved yet
             if (!resolved.current) {
-              await resolve(session, mounted, 'onAuthStateChange-INITIAL_SESSION');
+              resolve(session, mounted, 'onAuthStateChange-INITIAL_SESSION');
             }
             break;
 
           case 'SIGNED_IN':
           case 'TOKEN_REFRESHED':
-            await resolve(session, mounted, `onAuthStateChange-${event}`);
+            resolve(session, mounted, `onAuthStateChange-${event}`);
             break;
 
           case 'SIGNED_OUT':
@@ -175,7 +195,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             break;
 
           default:
-            await resolve(session, mounted, `onAuthStateChange-${event}`);
+            resolve(session, mounted, `onAuthStateChange-${event}`);
             break;
         }
       }

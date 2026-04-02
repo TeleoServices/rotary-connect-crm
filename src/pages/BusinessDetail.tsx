@@ -97,6 +97,7 @@ export default function BusinessDetail() {
 
   const saveEdits = async () => {
     if (!id) return;
+    if (!editForm.name || !(editForm.name as string).trim()) return;
     const { error } = await supabase
       .from('businesses')
       .update(editForm)
@@ -284,7 +285,9 @@ function OverviewTab({
   editForm: TablesUpdate<'businesses'>;
   setEditForm: React.Dispatch<React.SetStateAction<TablesUpdate<'businesses'>>>;
 }) {
-  const fields: { label: string; key: keyof Business; type?: string }[] = [
+  const fields: { label: string; key: keyof Business; type?: string; required?: boolean }[] = [
+    { label: 'Business Name', key: 'name', required: true },
+    { label: 'Industry', key: 'industry' },
     { label: 'Contact Name', key: 'contact_name' },
     { label: 'Contact Title', key: 'contact_title' },
     { label: 'Email', key: 'email', type: 'email' },
@@ -299,14 +302,15 @@ function OverviewTab({
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      {fields.map(({ label, key, type }) => (
+      {fields.map(({ label, key, type, required }) => (
         <div key={key}>
-          <label className="block text-xs font-medium text-muted-foreground mb-1">{label}</label>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">{label}{required && editing && <span className="text-destructive ml-0.5">*</span>}</label>
           {editing ? (
             <input
               type={type || 'text'}
               value={(editForm[key] as string) ?? ''}
               onChange={e => setEditForm(prev => ({ ...prev, [key]: e.target.value }))}
+              required={required}
               className="w-full px-3 py-2 border border-input rounded-md bg-background text-sm"
             />
           ) : (
