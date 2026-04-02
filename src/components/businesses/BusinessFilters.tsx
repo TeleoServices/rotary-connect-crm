@@ -1,5 +1,6 @@
 import { Search, X } from 'lucide-react';
 import type { BusinessFilters as Filters } from '@/hooks/useBusinesses';
+import { INDUSTRIES } from '@/lib/industries';
 
 const STATUSES = [
   { value: '', label: 'All Statuses' },
@@ -42,6 +43,18 @@ export function BusinessFilters({ filters, onFiltersChange }: Props) {
       >
         {STATUSES.map(s => (
           <option key={s.value} value={s.value}>{s.label}</option>
+        ))}
+      </select>
+
+      {/* Industry filter */}
+      <select
+        value={filters.industry || ''}
+        onChange={(e) => onFiltersChange({ ...filters, industry: e.target.value || undefined })}
+        className="w-full py-2 px-3 border border-input rounded-md bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+      >
+        <option value="">All Industries</option>
+        {INDUSTRIES.map(ind => (
+          <option key={ind} value={ind}>{ind}</option>
         ))}
       </select>
 

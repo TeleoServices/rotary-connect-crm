@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import type { BusinessInsert } from '@/hooks/useBusinesses';
+import { IndustrySelect } from '@/components/common/IndustrySelect';
 
 interface Props {
   open: boolean;
@@ -55,7 +56,10 @@ export function QuickAddBusiness({ open, onClose, onSave }: Props) {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <Field label="Business Name *" value={form.name} onChange={v => set('name', v)} required />
-            <Field label="Industry" value={form.industry || ''} onChange={v => set('industry', v)} />
+            <div>
+              <label className="block text-sm font-medium mb-1">Industry</label>
+              <IndustrySelect value={form.industry || ''} onChange={v => set('industry', v)} />
+            </div>
             <Field label="Contact Name" value={form.contact_name || ''} onChange={v => set('contact_name', v)} />
             <Field label="Email" value={form.email || ''} onChange={v => set('email', v)} type="email" />
             <Field label="Phone" value={form.phone || ''} onChange={v => set('phone', v)} type="tel" />

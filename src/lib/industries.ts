@@ -1,0 +1,22 @@
+/** NAICS-based industry categories used across all industry dropdowns */
+export const INDUSTRIES = [
+  'Accommodation & Food Services',
+  'Administrative & Support Services',
+  'Agriculture, Fishing, Hunting',
+  'Arts, Entertainment & Recreation',
+  'Construction',
+  'Educational Services',
+  'Finance & Insurance',
+  'Health Care & Social Assistance',
+  'Information',
+  'Management',
+  'Manufacturing',
+  'Other Services',
+  'Professional, Scientific & Technical',
+  'Public Administration',
+  'Real Estate Rental & Leasing',
+  'Retail Trade',
+  'Transportation & Warehousing',
+  'Utilities',
+  'Wholesale Trade',
+] as const;
