@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Copy, Check, Edit2, Save, X } from 'lucide-react';
-import { useTemplates, TYPE_LABELS, TYPE_GROUPS, renderMergeFields, type Template } from '@/hooks/useTemplates';
+import { useTemplates, TYPE_LABELS, TYPE_GROUPS, renderMergeFields, ALL_MERGE_FIELDS, type Template } from '@/hooks/useTemplates';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { QueryError } from '@/components/common/QueryError';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
@@ -11,15 +11,12 @@ const SAMPLE_DATA: Record<string, string> = {
   '{{rotary_member_name}}': 'John Doe',
   '{{rotary_club_name}}': 'Rotary Club of Springfield',
   '{{specific_need}}': 'workforce training and development',
+  '{{city}}': 'Springfield',
+  '{{state}}': 'IL',
+  '{{email}}': 'jane@acmecorp.com',
+  '{{phone}}': '(555) 123-4567',
+  '{{industry}}': 'Manufacturing',
 };
-
-const MERGE_FIELDS = [
-  '{{contact_name}}',
-  '{{business_name}}',
-  '{{rotary_member_name}}',
-  '{{rotary_club_name}}',
-  '{{specific_need}}',
-];
 
 export default function Templates() {
   const { templates, loading, error, updateTemplate, refetch } = useTemplates();
@@ -188,12 +185,13 @@ export default function Templates() {
               {editing && (
                 <div className="tpl-merge-toolbar px-4 py-2 border-b border-border bg-muted/30 flex flex-wrap gap-1">
                   <span className="text-xs text-muted-foreground mr-2 self-center">Insert:</span>
-                  {MERGE_FIELDS.map(field => (
+                  {ALL_MERGE_FIELDS.map(({ field, label }) => (
                     <button
                       key={field}
                       type="button"
                       onClick={() => insertMergeField(field)}
                       className="px-2 py-0.5 text-xs border border-input rounded bg-background hover:bg-accent"
+                      title={label}
                     >
                       {field}
                     </button>

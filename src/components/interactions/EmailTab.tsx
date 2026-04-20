@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Copy, Check, ExternalLink, AlertTriangle } from 'lucide-react';
+import { Copy, Check, ExternalLink, AlertTriangle, Info } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useTemplates, TYPE_LABELS, renderMergeFields } from '@/hooks/useTemplates';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
@@ -52,6 +52,14 @@ export function EmailTab({ business, needs }: Props) {
       '{{rotary_member_phone}}': profile?.phone || '',
       '{{rotary_club_name}}': 'Rotary Club',
       '{{specific_need}}': needsText,
+      '{{city}}': business.city || '',
+      '{{state}}': business.state || '',
+      '{{email}}': business.email || '',
+      '{{phone}}': business.phone || '',
+      '{{industry}}': business.industry || '',
+      // Legacy field aliases (in case live templates still use old field names)
+      '{{sender_name}}': profile?.full_name || '',
+      '{{sender_title}}': '',
     };
   }, [business, profile, needs]);
 
@@ -109,6 +117,15 @@ export function EmailTab({ business, needs }: Props) {
         </div>
       )}
 
+      {/* Email app info */}
+      <div className="flex items-start gap-2 p-3 rounded-lg border border-blue-200 bg-blue-50 text-blue-800 text-sm dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300">
+        <Info className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+        <p>
+          <strong>Open in Email</strong> will launch your default email app (Outlook, Gmail, Apple Mail, etc.)
+          with the template pre-filled. Emails are not sent from this app.
+        </p>
+      </div>
+
       {/* Template selector */}
       <div>
         <label className="block text-xs font-medium text-muted-foreground mb-1">Choose a template</label>
@@ -149,6 +166,7 @@ export function EmailTab({ business, needs }: Props) {
               <button
                 onClick={handleMailto}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-primary text-primary-foreground rounded-md hover:opacity-90 transition-colors"
+                title="Opens in your default email app (Outlook, Gmail, etc.)"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
                 Open in Email

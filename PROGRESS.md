@@ -2,6 +2,10 @@
 
 ## Post-Launch Fixes (March 2026)
 
+### 2026-04-20 — Template Preview Fix + Mailto Info Banner
+- **Changes**: `renderMergeFields` now strips any unreplaced `{{merge_fields}}` so users never see raw brackets — addresses tester feedback about confusing brackets in the initial outreach template. Added `ALL_MERGE_FIELDS` export as single source of truth (10 fields). Expanded `SAMPLE_DATA` in Templates.tsx and `mergeData` in EmailTab.tsx to cover all supported fields. Added blue info banner on Business Detail → Emails tab explaining that "Open in Email" launches the user's default email app (Outlook, Gmail, etc.) and does not send from within the CRM — addresses tester feedback that the mailto behavior was not obvious. Added tooltip to "Open in Email" button. Updated seed file (`003_seed_templates.sql`) template types and merge field names to match UI constants (does not affect live DB — seed is idempotent).
+- **Files**: `src/hooks/useTemplates.ts`, `src/pages/Templates.tsx`, `src/components/interactions/EmailTab.tsx`, `supabase/migrations/003_seed_templates.sql`
+
 ### 2026-03-28 — Edit/Delete for Interactions & Needs
 - **Commit**: `1a06d48`
 - **Migration**: `006_update_delete_policies.sql` — team-wide UPDATE and DELETE on `interactions` and `business_needs` (dropped "own only" policies, any authenticated user can edit/delete)

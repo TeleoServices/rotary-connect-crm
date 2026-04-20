@@ -109,7 +109,25 @@ export function renderMergeFields(body: string, data: Record<string, string>): s
   for (const [key, value] of Object.entries(data)) {
     result = result.replace(new RegExp(key.replace(/[{}]/g, '\\$&'), 'g'), value);
   }
+  // Strip any remaining unreplaced merge fields so users never see raw brackets
+  result = result.replace(/\{\{[a-z_]+\}\}/g, '');
+  // Clean up any double-spaces left behind
+  result = result.replace(/  +/g, ' ');
   return result;
 }
+
+/** All supported merge fields with human-readable labels */
+export const ALL_MERGE_FIELDS: { field: string; label: string }[] = [
+  { field: '{{contact_name}}', label: 'Contact Name' },
+  { field: '{{business_name}}', label: 'Business Name' },
+  { field: '{{rotary_member_name}}', label: 'Your Name' },
+  { field: '{{rotary_club_name}}', label: 'Club Name' },
+  { field: '{{specific_need}}', label: 'Business Need' },
+  { field: '{{city}}', label: 'City' },
+  { field: '{{state}}', label: 'State' },
+  { field: '{{email}}', label: 'Business Email' },
+  { field: '{{phone}}', label: 'Business Phone' },
+  { field: '{{industry}}', label: 'Industry' },
+];
 
 export type { Template, TemplateInsert, TemplateUpdate };
